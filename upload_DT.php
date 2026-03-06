@@ -1,0 +1,324 @@
+<?php
+session_start();
+if (!isset($_SESSION['admin'])) {
+    header("Location: ../auth/login.php");
+    exit;
+}
+?>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Upload Data - Balmon Surabaya</title>
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <style>
+        .upload-container {
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        
+        .upload-icon {
+            text-align: center;
+            font-size: 70px;
+            margin: 20px 0;
+            color: #0b3c68;
+        }
+        
+        .upload-instructions {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #0b3c68;
+        }
+        
+        .upload-instructions h4 {
+            color: #0b3c68;
+            margin-top: 0;
+        }
+        
+        .upload-instructions ul {
+            padding-left: 20px;
+            margin: 10px 0;
+        }
+        
+        .upload-instructions li {
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+        
+        .file-input {
+            width: 100%;
+            padding: 15px;
+            border: 2px dashed #0b3c68;
+            border-radius: 10px;
+            background: #f8f9fa;
+            text-align: center;
+            cursor: pointer;
+            margin: 20px 0;
+        }
+        
+        .file-input:hover {
+            background: #e9ecef;
+        }
+        
+        .upload-btn {
+            background: linear-gradient(135deg, #0b3c68, #1e5fa3);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            display: block;
+            margin: 30px auto;
+            transition: all 0.3s;
+        }
+        
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(11, 60, 104, 0.3);
+        }
+        
+        .upload-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .loading {
+            text-align: center;
+            color: #666;
+            margin: 20px 0;
+            display: none;
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 4px solid;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border-color: #c3e6cb;
+        }
+        
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border-color: #f5c6cb;
+        }
+        
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border-color: #bee5eb;
+        }
+        
+        .file-size-info {
+            color: #666;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<?php include "sidebar.php"; ?>
+
+<div class="main">
+    <div class="topbar">
+        <div>
+            <h1>Upload Data Drivetest</h1>
+            <span>Unggah data hasil pengukuran lapangan dalam format Excel</span>
+        </div>
+    </div>
+
+    <div class="upload-container">
+        <!-- Status Messages -->
+        <?php if (isset($_GET['status'])): ?>
+            <div class="alert alert-<?= $_GET['status'] == 'success' ? 'success' : 'error' ?>">
+                <?php if ($_GET['status'] == 'success'): ?>
+                    <h4>✅ Upload Berhasil!</h4>
+                    <p>
+                        Data berhasil diupload ke database.
+                        <?php if (isset($_GET['count'])): ?>
+                            <br><strong><?= htmlspecialchars($_GET['count']) ?> data</strong> telah diproses.
+                        <?php endif; ?>
+                    </p>
+                <?php elseif ($_GET['status'] == 'error'): ?>
+                    <h4>❌ Upload Gagal!</h4>
+                    <p>
+                        <?= isset($_GET['message']) ? htmlspecialchars($_GET['message']) : 'Terjadi kesalahan saat mengupload file' ?>
+                    </p>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
+        <div class="card">
+            <div class="upload-icon">📁</div>
+            <h3 style="text-align: center; color: #0b3c68; margin-bottom: 20px;">Upload File Drivetest</h3>
+
+            <div class="upload-instructions">
+                <h4>Instruksi Upload Data Drivetest:</h4>
+                <ul>
+                    <li><strong>Format file:</strong> .xlsx atau .xls (File hasil drivetest)</li>
+                    <li><strong>Ukuran maksimal:</strong> 50MB</li>
+                    <li><strong>Struktur kolom yang diperlukan:</strong>
+                        <ul>
+                            <li>Operator (Kolom C)</li>
+                            <li>msgTime (Kolom F)</li>
+                            <li>RSRP (Kolom K)</li>
+                            <li>RSRQ (Kolom L)</li>
+                            <li>SINR (Kolom P)</li>
+                            <li>Latitude (Kolom T)</li>
+                            <li>Longitude (Kolom U)</li>
+                            <li>Kabupaten/Kota (Kolom Z)</li>
+                        </ul>
+                    </li>
+                    <li>Pastikan data dimulai di baris ke-2</li>
+                    <li>Data akan ditampilkan di halaman mapping</li>
+                </ul>
+            </div>
+
+            <form method="POST" action="upload_process_DT.php" enctype="multipart/form-data" id="uploadForm">
+                <input type="file" name="file_excel" id="file_excel" 
+                       accept=".xlsx,.xls,.xlsm" required class="file-input">
+                
+                <button type="submit" class="upload-btn" id="submitBtn">
+                    ⬆ Upload & Simpan Data
+                </button>
+                
+                <div class="loading" id="loading">
+                    <div style="margin-bottom: 10px;">⏳ Memproses data, harap tunggu...</div>
+                    <div style="font-size: 14px; color: #888;">
+                        Proses mungkin memakan waktu beberapa menit untuk data yang besar
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <div id="progressBar" style="height: 4px; background: #e9ecef; border-radius: 2px; overflow: hidden;">
+                            <div id="progressFill" style="height: 100%; width: 0%; background: #0b3c68; transition: width 0.3s;"></div>
+                        </div>
+                        <div id="progressText" style="margin-top: 5px; font-size: 12px; color: #666;">0%</div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('file_excel').addEventListener('change', function(e) {
+    const file = this.files[0];
+    const fileSizeInfo = document.getElementById('fileSizeInfo');
+    
+    if (file) {
+        const fileSize = (file.size / (1024 * 1024)).toFixed(2);
+        fileSizeInfo.innerHTML = `File: ${file.name} (${fileSize} MB)`;
+        fileSizeInfo.style.color = '#0b3c68';
+    } else {
+        fileSizeInfo.innerHTML = 'File belum dipilih. Maksimal 40MB';
+        fileSizeInfo.style.color = '#666';
+    }
+});
+
+document.getElementById('uploadForm').addEventListener('submit', function(e) {
+    const fileInput = document.getElementById('file_excel');
+    const submitBtn = document.getElementById('submitBtn');
+    const loading = document.getElementById('loading');
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+    
+    if (!fileInput.files.length) {
+        alert('Silakan pilih file Excel terlebih dahulu');
+        e.preventDefault();
+        return false;
+    }
+    
+    const file = fileInput.files[0];
+    const maxSize = 200 * 1024 * 1024; // 200MB
+    
+    if (file.size > maxSize) {
+        alert('File terlalu besar. Maksimal ukuran file adalah 200MB');
+        e.preventDefault();
+        return false;
+    }
+    
+    // Validasi ekstensi file
+    const validExtensions = ['.xlsx', '.xls', '.xlsm'];
+    const fileName = file.name.toLowerCase();
+    const isValidExtension = validExtensions.some(ext => fileName.endsWith(ext));
+    
+    if (!isValidExtension) {
+        alert('Format file tidak didukung. Harap upload file Excel (.xlsx, .xls, atau .xlsm)');
+        e.preventDefault();
+        return false;
+    }
+    
+    // Tampilkan loading dan progress
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '⏳ Memproses...';
+    loading.style.display = 'block';
+    
+    // Simulasi progress bar
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+        progress += 1;
+        if (progress <= 90) {
+            progressFill.style.width = progress + '%';
+            progressText.innerHTML = progress + '% - Mengunggah file...';
+        }
+    }, 500);
+    
+    // Simpan interval ID untuk di-clear nanti
+    this.progressInterval = progressInterval;
+    
+    return true;
+});
+
+// Drag and drop functionality
+const fileInput = document.getElementById('file_excel');
+const fileInputArea = fileInput.parentElement;
+
+fileInputArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    fileInputArea.style.backgroundColor = '#e9ecef';
+    fileInputArea.style.borderColor = '#1e5fa3';
+});
+
+fileInputArea.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    fileInputArea.style.backgroundColor = '#f8f9fa';
+    fileInputArea.style.borderColor = '#0b3c68';
+});
+
+fileInputArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    fileInputArea.style.backgroundColor = '#f8f9fa';
+    fileInputArea.style.borderColor = '#0b3c68';
+    
+    if (e.dataTransfer.files.length) {
+        fileInput.files = e.dataTransfer.files;
+        
+        // Update tampilan nama file
+        const file = fileInput.files[0];
+        const fileSize = (file.size / (1024 * 1024)).toFixed(2);
+        
+        fileInputArea.innerHTML = `
+            <div style="color: #0b3c68; font-weight: bold;">
+                📄 ${file.name}
+            </div>
+            <div style="color: #666; font-size: 14px; margin-top: 5px;">
+                ${fileSize} MB - Klik untuk mengganti file
+            </div>
+        `;
+        
+        // Update file size info
+        document.getElementById('fileSizeInfo').innerHTML = 
+            `File: ${file.name} (${fileSize} MB)`;
+    }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,76 @@
+<?php
+session_start();
+if (!isset($_SESSION['admin'])) {
+    header("Location: ../auth/login.php");
+    exit;
+}
+?>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard QoS - Balmon Surabaya</title>
+    <link rel="stylesheet" href="../assets/css/style1.css">
+</head>
+<body>
+
+<?php include "sidebar.php"; ?>
+
+<div class="main">
+    <div class="topbar">
+        <div>
+            <h1>Dashboard Pengukuran Kualitas Layanan</h1>
+            <span>Balai Monitor SFR Kelas I Surabaya</span>
+        </div>
+    </div>
+
+    <!-- SUMMARY CARDS -->
+    <div class="card-container">
+        <div class="summary-card">
+            <div class="card-icon">🚗</div>
+            <h3>Data Upload</h3>
+            <p>Kelola & upload data Drivetest</p>
+            <a href="upload_DT.php">Lihat</a>
+        </div> 
+
+         <div class="summary-card">
+            <div class="card-icon">📤</div>
+            <h3>Data Upload</h3>
+            <p>Kelola & upload data QoS</p>
+            <a href="upload_summary.php">Lihat</a>
+        </div>
+
+        <div class="summary-card">
+            <div class="card-icon">📶</div>
+            <h3>Kualitas Sinyal</h3>
+            <p>RSRP, RSRQ, SINR</p>
+            <a href="kualitas_sinyal.php">Lihat</a>
+        </div>
+
+        <div class="summary-card">
+            <div class="card-icon">📊</div>
+            <h3>Kualitas Layanan</h3>
+            <p>Ping, Speedtest, YouTube & Success Rate</p>
+            <a href="kualitas_layanan.php">Lihat</a>
+        </div>
+
+        <div class="summary-card">
+            <div class="card-icon">🗺️</div>
+            <h3>Mapping</h3>
+            <p>Peta kualitas jaringan</p>
+            <a href="mapping.php">Lihat</a>
+        </div>
+    </div>
+
+    <!-- INFO CARD -->
+    <div class="card">
+        <h3>Informasi</h3>
+        <p>
+            Dashboard ini digunakan untuk visualisasi hasil pengukuran kualitas layanan dan kualitas sinyal 
+            jaringan seluler berdasarkan data pengujian lapangan. Data dapat diupload melalui menu Data Upload.
+        </p>
+    </div>
+</div>
+
+</body>
+</html>
