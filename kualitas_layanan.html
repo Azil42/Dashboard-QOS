@@ -1,0 +1,1141 @@
+<!-- /* ================= FILTER ================= */
+$operator   = $_GET['operator'] ?? 'all';
+$jenis_tes  = $_GET['jenis_tes'] ?? 'all';
+$kota       = $_GET['kota'] ?? 'all';
+$startDate  = $_GET['start'] ?? '';
+$endDate    = $_GET['end'] ?? '';
+
+$where = [];
+$params = [];
+
+if ($operator != 'all') {
+    $where[] = "operator = ?";
+    $params[] = $operator;
+}
+if ($jenis_tes != 'all') {
+    $where[] = "jenis_tes = ?";
+    $params[] = $jenis_tes;
+}
+if ($kota != 'all') {
+    $where[] = "kota_kabupaten = ?";
+    $params[] = $kota;
+}
+if ($startDate && $endDate) {
+    $where[] = "measure_date BETWEEN ? AND ?";
+    $params[] = $startDate;
+    $params[] = $endDate;
+}
+
+$whereSQL = $where ? "WHERE " . implode(" AND ", $where) : "";
+
+/* ================= DATA PER OPERATOR ================= */
+$sqlOperator = "
+    SELECT 
+        operator,
+        AVG(avg_download) AS download,
+        AVG(avg_upload) AS upload,
+        AVG(avg_latency) AS latency,
+        AVG(ping_success_rate) AS success_rate,
+        AVG(avg_visual_quality) AS visual_quality,
+        AVG(avg_ttfp) AS ttfp,
+        COUNT(*) as total_tests
+    FROM compile_summary
+    $whereSQL
+    GROUP BY operator
+    ORDER BY operator
+";
+
+$stmt = $pdo->prepare($sqlOperator);
+$stmt->execute($params);
+$dataOperator = $stmt->fetchAll();
+
+/* ================= DATA PER JENIS TES ================= */
+$sqlJenisTes = "
+    SELECT 
+        jenis_tes,
+        AVG(avg_download) AS download,
+        AVG(avg_upload) AS upload,
+        AVG(avg_latency) AS latency,
+        AVG(ping_success_rate) AS success_rate,
+        COUNT(*) as total_tests
+    FROM compile_summary
+    $whereSQL
+    GROUP BY jenis_tes
+    ORDER BY jenis_tes
+";
+
+$stmt = $pdo->prepare($sqlJenisTes);
+$stmt->execute($params);
+$dataJenisTes = $stmt->fetchAll();
+
+/* ================= DATA PER HARI ================= */
+$sqlHari = "
+    SELECT 
+        measure_date as tanggal,
+        AVG(avg_download) AS download,
+        AVG(avg_upload) AS upload,
+        AVG(avg_latency) AS latency, 
+        AVG(avg_visual_quality) AS visual_quality,
+        AVG(avg_ttfp) AS ttfp, 
+        AVG(ping_success_rate) AS ping_sr,
+        AVG(youtube_sr) AS youtube_sr,
+        COUNT(*) as total_tests
+    FROM compile_summary
+    $whereSQL
+    GROUP BY measure_date
+    ORDER BY measure_date DESC
+    LIMIT 14
+";
+
+$stmt = $pdo->prepare($sqlHari);
+$stmt->execute($params);
+$dataHari = $stmt->fetchAll();
+
+/* ================= DATA DISTRIBUSI ================= */
+$sqlDistribusi = "
+    SELECT 
+        CASE 
+            WHEN avg_download >= 100 THEN 'Sangat Cepat'
+            WHEN avg_download >= 50 THEN 'Cepat'
+            WHEN avg_download >= 20 THEN 'Sedang'
+            WHEN avg_download >= 10 THEN 'Lambat'
+            ELSE 'Sangat Lambat'
+        END as kategori,
+        COUNT(*) as jumlah
+    FROM compile_summary
+    $whereSQL
+    GROUP BY 
+        CASE 
+            WHEN avg_download >= 100 THEN 'Sangat Cepat'
+            WHEN avg_download >= 50 THEN 'Cepat'
+            WHEN avg_download >= 20 THEN 'Sedang'
+            WHEN avg_download >= 10 THEN 'Lambat'
+            ELSE 'Sangat Lambat'
+        END
+    ORDER BY 
+        CASE 
+            WHEN avg_download >= 100 THEN 1
+            WHEN avg_download >= 50 THEN 2
+            WHEN avg_download >= 20 THEN 3
+            WHEN avg_download >= 10 THEN 4
+            ELSE 5
+        END
+";
+
+$stmt = $pdo->prepare($sqlDistribusi);
+$stmt->execute($params);
+$dataDistribusi = $stmt->fetchAll();
+
+/* ================= DATA SUCCESS RATE PER OPERATOR ================= */
+$sqlPingOperator = "
+    SELECT 
+        operator,
+        AVG(ping_success_rate) AS ping_sr,
+        AVG(youtube_sr) AS youtube_sr
+    FROM compile_summary
+    $whereSQL
+    GROUP BY operator
+    ORDER BY operator
+";
+$stmt = $pdo->prepare($sqlPingOperator);
+$stmt->execute($params);
+$dataPingOperator = $stmt->fetchAll();
+
+/* ================= DATA SUCCESS RATE PER HARI ================= */
+$sqlPingHari = "
+    SELECT 
+        measure_date AS tanggal,
+        AVG(ping_success_rate) AS ping_sr,
+        AVG(youtube_sr) AS youtube_sr
+    FROM compile_summary
+    $whereSQL
+    GROUP BY measure_date
+    ORDER BY measure_date
+    LIMIT 14
+";
+$stmt = $pdo->prepare($sqlPingHari);
+$stmt->execute($params);
+$dataPingHari = $stmt->fetchAll();
+
+/* ================= DATA TOP 3 OPERATOR ================= */
+$sqlTop3 = "
+    SELECT 
+        operator,
+        AVG(avg_download) AS download,
+        AVG(avg_upload) AS upload,
+        AVG(avg_latency) AS latency,
+        AVG(avg_visual_quality) AS visual_quality,
+        COUNT(*) as total_tests
+    FROM compile_summary
+    $whereSQL
+    GROUP BY operator
+    ORDER BY download DESC
+    LIMIT 3
+";
+$stmt = $pdo->prepare($sqlTop3);
+$stmt->execute($params);
+$dataTop3 = $stmt->fetchAll();
+
+/* ================= FILTER MASTER ================= */
+$operators = $pdo->query("SELECT DISTINCT operator FROM compile_summary WHERE operator IS NOT NULL ORDER BY operator")->fetchAll();
+$jenisTesList = $pdo->query("SELECT DISTINCT jenis_tes FROM compile_summary WHERE jenis_tes IS NOT NULL ORDER BY jenis_tes")->fetchAll();
+$kotas = $pdo->query("SELECT DISTINCT kota_kabupaten FROM compile_summary WHERE kota_kabupaten IS NOT NULL ORDER BY kota_kabupaten")->fetchAll();
+
+/* ================= STATISTIK ================= */
+$sqlStats = "
+    SELECT 
+        COUNT(*) AS total_tests,
+        COUNT(DISTINCT operator) AS operator_count,
+        COUNT(DISTINCT jenis_tes) AS jenis_tes_count,
+        COUNT(DISTINCT kota_kabupaten) AS kota_count,
+        AVG(avg_download) AS avg_download,
+        AVG(avg_upload) AS avg_upload,
+        AVG(avg_latency) AS avg_latency,
+        AVG(ping_success_rate) AS avg_ping_sr,
+        AVG(youtube_sr) AS avg_youtube_sr,
+        AVG(avg_visual_quality) AS avg_visual_quality,
+        AVG(avg_ttfp) AS avg_ttfp,
+        MIN(avg_download) AS min_download,
+        MAX(avg_download) AS max_download
+    FROM compile_summary
+    $whereSQL
+";
+$stmt = $pdo->prepare($sqlStats);
+$stmt->execute($params);
+$stats = $stmt->fetch(PDO::FETCH_ASSOC);
+?> 
+-->
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Kualitas Layanan - Balmon Surabaya</title>
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .main {
+            padding: 30px;
+        }
+        
+        .topbar {
+            background: white;
+            border-radius: 16px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        }
+        
+        .topbar h1 {
+            color: #0b3c68;
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+        
+        .topbar span {
+            color: #666;
+            font-size: 15px;
+        }
+        
+        .filter-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .filter-grid select,
+        .filter-grid input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        
+        .filter-grid button {
+            background: linear-gradient(135deg, #0b3c68, #1e5fa3);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .filter-grid button:hover {
+            background: #2980b9;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+        }
+        
+        .card h3 {
+            color: #0b3c68;
+            margin-bottom: 20px;
+            font-size: 20px;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 350px;
+            width: 100%;
+        }
+        
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 25px;
+            margin-bottom: 25px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+        }
+        
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #0b3c68;
+            margin: 10px 0;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .stat-subvalue {
+            font-size: 13px;
+            color: #888;
+            margin-top: 5px;
+        }
+        
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        
+        .data-table th {
+            background: #f1f1f1;
+            padding: 12px;
+            text-align: left;
+            border-bottom: 2px solid #ddd;
+            color: #0b3c68;
+        }
+        
+        .data-table td {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .data-table tr:hover {
+            background: #f9f9f9;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .badge-success {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .badge-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .badge-danger {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .badge-info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .badge-primary {
+            background: #cce5ff;
+            color: #004085;
+        }
+        
+        .warning-box {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border-left: 4px solid #ffc107;
+        }
+        
+        .reset-link {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            text-align: center;
+            text-decoration: none;
+            color: #666;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            transition: all 0.3s;
+        }
+        
+        .reset-link:hover {
+            background: #f8f9fa;
+            border-color: #0b3c68;
+            color: #0b3c68;
+        }
+        
+        /* Gaya untuk section baru */
+        .section-title {
+            font-size: 24px;
+            color: #0b3c68;
+            margin: 30px 0 20px 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .chart-small {
+            height: 300px;
+        }
+        
+        .interpretation-box {
+            background: #f8f9fa;
+            border-left: 4px solid #0b3c68;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        
+        .interpretation-box h4 {
+            color: #0b3c68;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2>BALMON<br>Surabaya</h2>
+            <p class="role">Admin Dashboard</p>
+        </div>
+    
+        <nav class="sidebar-nav">
+            <a href="index.html" class="nav-item">
+                <span class="nav-icon">🏠</span>
+                <span class="nav-text">Dashboard</span>
+            </a>
+    
+            <a href="upload_DT.html" class="nav-item">
+                <span class="nav-icon">🚗</span>
+                <span class="nav-text">Upload File Drivetest</span>
+            </a>
+    
+            <a href="upload_summary.html" class="nav-item active">
+                <span class="nav-icon">📤</span>
+                <span class="nav-text">Upload File Data QoS</span>
+            </a>
+    
+            <a href="kualitas_sinyal.html" class="nav-item">
+                <span class="nav-icon">📶</span>
+                <span class="nav-text">Kualitas Sinyal</span>
+            </a>
+    
+            <a href="kualitas_layanan.html" class="nav-item">
+                <span class="nav-icon">📊</span>
+                <span class="nav-text">Kualitas Layanan</span>
+            </a>
+    
+            <a href="mapping.html" class="nav-item">
+                <span class="nav-icon">🗺️</span>
+                <span class="nav-text">Mapping</span>
+            </a>
+        </nav>
+    </div>
+
+<div class="main">
+    <!-- 1. TOPBAR -->
+    <div class="topbar">
+        <div>
+            <h1>Dashboard Kualitas Layanan</h1>
+            <span>Monitoring Speedtest, Latency, Visual Quality & Success Rate</span>
+        </div>
+    </div>
+
+    <!-- Warning jika tidak ada data -->
+    <!-- <?php 
+    $totalData = $pdo->query("SELECT COUNT(*) as total FROM compile_summary")->fetch()['total'];
+    if ($totalData == 0): ?> -->
+    <div class="warning-box">
+        <h4>⚠ Data Belum Tersedia</h4>
+        <p>Silakan upload data compile summary terlebih dahulu untuk melihat visualisasi kualitas layanan.</p>
+        <a href="upload_summary.html" style="display: inline-block; margin-top: 10px; padding: 8px 16px; background: #0b3c68; color: white; border-radius: 6px; text-decoration: none;">
+            📊 Upload Data Summary
+        </a>
+    </div>
+    <!-- <?php endif; ?> -->
+
+
+    <!-- 2. FILTER CARD -->
+    <div class="card">
+        <h3>Filter Data</h3>
+        <form method="GET" class="filter-grid">
+            <select name="operator">
+                <option value="all">Semua Operator</option>
+                <!-- <?php foreach($operators as $op): ?>
+                    <option value="<?= htmlspecialchars($op['operator']) ?>" <?= $operator == $op['operator'] ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($op['operator']) ?>
+                    </option>
+                <?php endforeach ?> -->
+            </select>
+
+            <select name="jenis_tes">
+                <option value="all">Semua Jenis Test</option>
+                <!-- <?php foreach($jenisTesList as $jt): ?>
+                    <option value="<?= htmlspecialchars($jt['jenis_tes']) ?>" <?= $jenis_tes == $jt['jenis_tes'] ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($jt['jenis_tes']) ?>
+                    </option>
+                <?php endforeach ?> -->
+            </select>
+
+            <select name="kota">
+                <option value="all">Semua Kota/Kab</option>
+                <!-- <?php foreach($kotas as $k): ?>
+                    <option value="<?= htmlspecialchars($k['kota_kabupaten']) ?>" <?= $kota == $k['kota_kabupaten'] ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($k['kota_kabupaten']) ?>
+                    </option>
+                <?php endforeach ?> -->
+            </select>
+
+            <!-- <input type="date" name="start" value="<?= htmlspecialchars($startDate) ?>" placeholder="Tanggal Mulai">
+            <input type="date" name="end" value="<?= htmlspecialchars($endDate) ?>" placeholder="Tanggal Akhir"> -->
+
+            <button type="submit">Terapkan Filter</button>
+            <a href="kualitas_layanan.html" class="reset-link">
+                Reset Filter
+            </a>
+        </form>
+    </div>
+
+<!-- 3. STATS GRID -->
+<div class="stats-grid">
+    <div class="stat-card total-tests">
+        <div class="stat-value"> <!-- <?= number_format($stats['total_tests'] ?? 0) ?> --></div>
+        <div class="stat-label">Total Pengujian</div>
+    </div>
+    
+    <div class="stat-card download">
+        <div class="stat-value"><!-- <?= number_format($stats['avg_download'] ?? 0, 1) ?> --> Mbps</div>
+        <div class="stat-label">Rata² Download</div>
+        <div class="stat-subvalue">
+            <!-- Min: <?= number_format($stats['min_download'] ?? 0, 1) ?> | 
+            Max: <?= number_format($stats['max_download'] ?? 0, 1) ?> -->
+        </div>
+    </div>
+    
+    <div class="stat-card latency">
+        <div class="stat-value"> <!-- <?= number_format($stats['avg_latency'] ?? 0, 1) ?> --> ms</div>
+        <div class="stat-label">Rata² Latency</div>
+    </div>
+    
+    <!-- KOTAK TTFP TERPISAH -->
+    <div class="stat-card ttfp">
+        <div class="stat-value"> <!-- <?= number_format($stats['avg_ttfp'] ?? 0, 1) ?> --> ms</div>
+        <div class="stat-label">TTFP</div>
+    </div>
+    
+    <div class="stat-card ping-success">
+        <div class="stat-value"> <!--<?= number_format($stats['avg_ping_sr'] ?? 0, 1) ?> --> %</div>
+        <div class="stat-label">Ping Success Rate</div>
+    </div>
+    
+    <!-- KOTAK YOUTUBE TERPISAH -->
+    <div class="stat-card youtube">
+        <div class="stat-value"><!-- <?= number_format($stats['avg_youtube_sr'] ?? 0, 1) ?> --> %</div>
+        <div class="stat-label">YouTube Success Rate</div>
+    </div>
+    
+    <div class="stat-card visual-quality">
+        <div class="stat-value"><!-- <?= number_format($stats['avg_visual_quality'] ?? 0, 1) ?> --> /5</div>
+        <div class="stat-label">Visual Quality</div>
+        <!-- <div class="stat-subvalue">
+            Skala: 1 (buruk) - 5 (sangat baik)
+        </div> -->
+    </div>
+</div>
+
+
+    <!-- 4. SECTION 1: SPEEDTEST -->
+    <h2 class="section-title">🎯 1. SPEEDTEST</h2>
+    
+    <div class="card-grid">
+        <!-- Chart 1.1: Tren Download & Upload per Hari -->
+        <div class="card">
+            <h3>Tren Download & Upload per Hari</h3>
+            <div class="chart-container chart-small">
+                <canvas id="chartSpeedTrend"></canvas>
+            </div>
+        </div>
+
+        <!-- Chart 1.2: Perbandingan Download & Upload 3 Operator -->
+        <div class="card">
+            <h3>Perbandingan Download & Upload 3 Operator</h3>
+            <div class="chart-container chart-small">
+                <canvas id="chartTop3Speed"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. SECTION 2: RTT / LATENCY -->
+    <h2 class="section-title">⏱️ 2. RTT / LATENCY</h2>
+    
+    <div class="card-grid">
+        <!-- Chart 2.1: Tren RTT per Hari -->
+        <div class="card">
+            <h3>Tren RTT (Latency) per Hari</h3>
+            <div class="chart-container chart-small">
+                <canvas id="chartLatencyTrend"></canvas>
+            </div>
+        </div>
+
+        <!-- Chart 2.2: Perbandingan RTT 3 Operator -->
+        <div class="card">
+            <h3>Perbandingan RTT 3 Operator</h3>
+            <div class="chart-container chart-small">
+                <canvas id="chartTop3Latency"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. SECTION 3: VISUAL QUALITY -->
+    <h2 class="section-title">📺 3. VISUAL QUALITY</h2>
+    
+    <div class="card-grid">
+        <!-- Chart 3.1: Tren Visual Quality per Hari -->
+        <div class="card">
+            <h3>Tren Visual Quality per Hari</h3>
+            <div class="chart-container chart-small">
+                <canvas id="chartVisualTrend"></canvas>
+            </div>
+        </div>
+
+        <!-- Chart 3.2: Perbandingan Visual Quality 3 Operator -->
+        <div class="card">
+            <h3>Perbandingan Visual Quality 3 Operator</h3>
+            <div class="chart-container chart-small">
+                <canvas id="chartTop3Visual"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- 7. SECTION 4: PING / SUCCESS RATE -->
+    <h2 class="section-title">✅ 4. SUCCESS RATE</h2>
+    
+    <div class="card-grid">
+        <!-- Chart 4.1: Perbandingan Success Rate Operator -->
+        <div class="card">
+            <h3>Perbandingan Success Rate per Operator</h3>
+            <div class="chart-container chart-small">
+                <canvas id="chartPingOperator"></canvas>
+            </div>
+        </div>
+
+        <!-- Chart 4.2: Tren Success Rate per Hari -->
+        <div class="card">
+            <h3>Tren Success Rate per Hari</h3>
+            <div class="chart-container chart-small">
+                <canvas id="chartPingTrend"></canvas>
+            </div>
+        </div>
+    </div>
+
+<!-- 8. TABLE CARD 1 (Data per Operator) -->
+<div class="card">
+    <h3>Detail Data per Operator</h3>
+    <div style="overflow-x: auto;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Operator</th>
+                    <th>Download (Mbps)</th>
+                    <th>Upload (Mbps)</th>
+                    <th>Latency (ms)</th>
+                    <th>TTFP (ms)</th>
+                    <th>Ping SR (%)</th>
+                    <th>YouTube SR (%)</th>
+                    <th>Visual Quality</th>
+                    <th>Total Tests</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- <?php foreach($dataOperator as $row): ?>
+                <tr>
+                    <td><strong><?= htmlspecialchars($row['operator']) ?></strong></td>
+                    <td><?= number_format($row['download'] ?? 0, 1) ?></td>
+                    <td><?= number_format($row['upload'] ?? 0, 1) ?></td>
+                    <td><?= number_format($row['latency'] ?? 0, 1) ?></td>
+                    <td><?= number_format($row['ttfp'] ?? 0, 1) ?></td>
+                    <td><?= number_format($row['success_rate'] ?? 0, 1) ?>%</td>
+                    <td><?= number_format($row['success_rate'] ?? 0, 1) ?>%</td>
+                    <td><?= number_format($row['visual_quality'] ?? 0, 1) ?>/5</td>
+                    <td><?= number_format($row['total_tests'] ?? 0) ?></td>
+                </tr>
+                <?php endforeach; ?> -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 9. TABLE CARD 2 (Data per Hari) -->
+<div class="card">
+    <h3>Data per Hari (14 Hari Terakhir)</h3>
+    <div style="overflow-x: auto;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Tanggal</th>
+                    <th>Download (Mbps)</th>
+                    <th>Upload (Mbps)</th>
+                    <th>Latency (ms)</th>
+                    <th>TTFP (ms)</th>
+                    <th>Ping SR (%)</th>
+                    <th>YouTube SR (%)</th>
+                    <th>Visual Quality</th>
+                    <th>Total Tests</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach($dataHari as $row): ?>
+                <tr>
+                    <td><?= htmlspecialchars($row['tanggal']) ?></td>
+                    <td><?= number_format($row['download'] ?? 0, 1) ?></td>
+                    <td><?= number_format($row['upload'] ?? 0, 1) ?></td>
+                    <td><?= number_format($row['latency'] ?? 0, 1) ?></td>
+                    <td><?= number_format($row['ttfp'] ?? 0, 1) ?></td>
+                    <td><?= number_format($row['ping_sr'] ?? 0, 1) ?>%</td>
+                    <td><?= number_format($row['youtube_sr'] ?? 0, 1) ?>%</td>
+                    <td><?= number_format($row['visual_quality'] ?? 0, 1) ?>/5</td>
+                    <td><?= number_format($row['total_tests'] ?? 0) ?></td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+</div>
+
+<script>
+// Data dari PHP ke JavaScript
+/*const dataOperator = <?= json_encode($dataOperator) ?>;
+const dataHari = <?= json_encode($dataHari) ?>;
+const dataDistribusi = <?= json_encode($dataDistribusi) ?>;
+const pingOperator = <?= json_encode($dataPingOperator) ?>;
+const pingDaily = <?= json_encode($dataPingHari) ?>;
+const dataTop3 = <?= json_encode($dataTop3) ?>;*/
+
+// ==================== 1. SPEEDTEST ====================
+
+// Chart 1.1: Tren Download & Upload per Hari
+if (dataHari.length > 0) {
+    new Chart(document.getElementById('chartSpeedTrend'), {
+        type: 'line',
+        data: {
+            labels: dataHari.map(d => d.tanggal),
+            datasets: [
+                {
+                    label: 'Download (Mbps)',
+                    data: dataHari.map(d => d.download),
+                    borderColor: '#2ecc71',
+                    backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                    tension: 0.3,
+                    fill: true
+                },
+                {
+                    label: 'Upload (Mbps)',
+                    data: dataHari.map(d => d.upload),
+                    borderColor: '#3498db',
+                    backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                    tension: 0.3,
+                    fill: true
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true, position: 'top' },
+                title: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Speed (Mbps)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Chart 1.2: Perbandingan Download & Upload 3 Operator
+if (dataTop3.length > 0) {
+    new Chart(document.getElementById('chartTop3Speed'), {
+        type: 'bar',
+        data: {
+            labels: dataTop3.map(d => d.operator),
+            datasets: [
+                {
+                    label: 'Download (Mbps)',
+                    data: dataTop3.map(d => d.download),
+                    backgroundColor: '#2ecc71',
+                    borderColor: '#27ae60',
+                    borderWidth: 1
+                },
+                {
+                    label: 'Upload (Mbps)',
+                    data: dataTop3.map(d => d.upload),
+                    backgroundColor: '#3498db',
+                    borderColor: '#2980b9',
+                    borderWidth: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true, position: 'top' },
+                title: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Speed (Mbps)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+// ==================== 2. RTT / LATENCY ====================
+
+// Chart 2.1: Tren RTT per Hari
+if (dataHari.length > 0) {
+    new Chart(document.getElementById('chartLatencyTrend'), {
+        type: 'line',
+        data: {
+            labels: dataHari.map(d => d.tanggal),
+            datasets: [
+                {
+                    label: 'RTT (Latency)',
+                    data: dataHari.map(d => d.latency),
+                    borderColor: '#e74c3c',
+                    backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                    tension: 0.3,
+                    fill: true
+                },
+                {
+                    label: 'TTFP',
+                    data: dataHari.map(d => d.ttfp),
+                    borderColor: '#f39c12',
+                    backgroundColor: 'rgba(243, 156, 18, 0.1)',
+                    tension: 0.3,
+                    fill: true
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true, position: 'top' },
+                title: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Waktu (ms)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Chart 2.2: Perbandingan RTT 3 Operator
+if (dataTop3.length > 0) {
+    new Chart(document.getElementById('chartTop3Latency'), {
+        type: 'bar',
+        data: {
+            labels: dataTop3.map(d => d.operator),
+            datasets: [
+                {
+                    label: 'RTT (Latency)',
+                    data: dataTop3.map(d => d.latency),
+                    backgroundColor: '#e74c3c',
+                    borderColor: '#c0392b',
+                    borderWidth: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true, position: 'top' },
+                title: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'RTT (ms)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+// ==================== 3. VISUAL QUALITY ====================
+
+// Chart 3.1: Tren Visual Quality per Hari
+if (dataHari.length > 0) {
+    new Chart(document.getElementById('chartVisualTrend'), {
+        type: 'line',
+        data: {
+            labels: dataHari.map(d => d.tanggal),
+            datasets: [
+                {
+                    label: 'Visual Quality',
+                    data: dataHari.map(d => d.visual_quality),
+                    borderColor: '#9b59b6',
+                    backgroundColor: 'rgba(155, 89, 182, 0.1)',
+                    tension: 0.3,
+                    fill: true
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true, position: 'top' },
+                title: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    min: 0,
+                    max: 5,
+                    title: {
+                        display: true,
+                        text: 'Skala (1-5)'
+                    },
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Chart 3.2: Perbandingan Visual Quality 3 Operator
+if (dataTop3.length > 0) {
+    new Chart(document.getElementById('chartTop3Visual'), {
+        type: 'bar',
+        data: {
+            labels: dataTop3.map(d => d.operator),
+            datasets: [
+                {
+                    label: 'Visual Quality',
+                    data: dataTop3.map(d => d.visual_quality),
+                    backgroundColor: '#9b59b6',
+                    borderColor: '#8e44ad',
+                    borderWidth: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true, position: 'top' },
+                title: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    min: 0,
+                    max: 5,
+                    title: {
+                        display: true,
+                        text: 'Skala (1-5)'
+                    },
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            }
+        }
+    });
+}
+
+// ==================== 4. PING / SUCCESS RATE ====================
+
+// Chart 4.1: Perbandingan Success Rate (Operator)
+if (pingOperator.length > 0) {
+    new Chart(document.getElementById('chartPingOperator'), {
+        type: 'bar',
+        data: {
+            labels: pingOperator.map(d => d.operator),
+            datasets: [
+                {
+                    label: 'Ping Success Rate (%)',
+                    data: pingOperator.map(d => d.ping_sr),
+                    backgroundColor: '#27ae60'
+                },
+                {
+                    label: 'YouTube Success Rate (%)',
+                    data: pingOperator.map(d => d.youtube_sr),
+                    backgroundColor: '#e74c3c'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { 
+                    display: true, 
+                    position: 'top'
+                },
+                title: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Success Rate (%)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Chart 4.2: Tren Success Rate per Hari
+if (pingDaily.length > 0) {
+    new Chart(document.getElementById('chartPingTrend'), {
+        type: 'line',
+        data: {
+            labels: pingDaily.map(d => d.tanggal),
+            datasets: [
+                {
+                    label: 'Ping Success Rate (%)',
+                    data: pingDaily.map(d => d.ping_sr),
+                    borderColor: '#27ae60',
+                    backgroundColor: 'rgba(39, 174, 96, 0.1)',
+                    tension: 0.3,
+                    fill: true
+                },
+                {
+                    label: 'YouTube Success Rate (%)',
+                    data: pingDaily.map(d => d.youtube_sr),
+                    borderColor: '#e74c3c',
+                    backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                    tension: 0.3,
+                    fill: true
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true, position: 'top' },
+                title: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Success Rate (%)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Jika tidak ada data, tampilkan pesan
+if (dataOperator.length === 0) {
+    document.querySelector('.card-grid').innerHTML = `
+        <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 40px;">
+            <h3>📊 Tidak Ada Data</h3>
+            <p>Upload data compile summary terlebih dahulu untuk melihat visualisasi</p>
+            <a href="upload_summary.html" style="display: inline-block; margin-top: 15px; padding: 10px 20px; background: #0b3c68; color: white; text-decoration: none; border-radius: 8px;">
+                📊 Upload Data Summary
+            </a>
+        </div>
+    `;
+}
+</script>
+</body>
+</html>
